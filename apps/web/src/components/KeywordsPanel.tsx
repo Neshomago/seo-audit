@@ -7,6 +7,7 @@ import type {
 } from '@seo-audit/core';
 import { hostOf } from '../format';
 import { toNegativeKeywordsCsv, toPositiveKeywordsCsv } from '../keywords-csv';
+import { filterKeywords } from '../keywords-filter';
 
 type Tab = 'oportunidades' | 'negativas' | 'fuentes';
 
@@ -105,19 +106,10 @@ export function KeywordsPanel({ keywords, url }: { keywords: KeywordReport | nul
   const [source, setSource] = useState('todas');
   const [showAll, setShowAll] = useState(false);
 
-  const filtered = useMemo(() => {
-    if (!keywords) return [];
-    const search = query.trim().toLowerCase();
-    return keywords.positives.filter((candidate) => {
-      const matchesQuery =
-        search.length === 0 ||
-        candidate.keyword.toLowerCase().includes(search) ||
-        candidate.normalized.includes(search);
-      const matchesIntent = intent === 'todas' || candidate.intent === intent;
-      const matchesSource = source === 'todas' || candidate.sources.includes(source as KeywordCandidate['sources'][number]);
-      return matchesQuery && matchesIntent && matchesSource;
-    });
-  }, [intent, keywords, query, source]);
+  const filtered = useMemo(
+    () => (keywords ? filterKeywords(keywords, { query, intent, source }) : []),
+    [intent, keywords, query, source],
+  );
 
   if (!keywords) {
     return (

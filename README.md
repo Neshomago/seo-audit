@@ -180,7 +180,9 @@ seo-audit/
 ├─ apps/
 │  └─ web/                  # React 19 + Vite + Tailwind 4
 │     ├─ server/audit-api.ts# Plugin Vite con POST /api/audit
+│     ├─ server/audit-request.ts # Validación pura del payload
 │     └─ src/               # UI, componentes y cliente de la API
+├─ .github/workflows/ci.yml # Typecheck, lint, tests y build web
 ├─ docs/                    # Arquitectura, keywords y deuda técnica
 ├─ reports/                 # Informes generados (ignorado por git)
 ├─ .cache/                  # Caché de GSC/Bing (ignorada por git)
@@ -214,14 +216,16 @@ seo-audit/
 
 ```powershell
 npm run check      # typecheck + lint + tests
-npm test           # 83 tests (Vitest)
+npm test           # 108 tests (Vitest)
 npm run typecheck  # TypeScript estricto en todos los workspaces
 npm run lint       # ESLint
 npm run smoke -- https://example.com --max-pages 1 --no-lighthouse
 npm run build:web  # build del frontend
 ```
 
-Estructura de tests: unitarios de URL/SSRF, crawl, detección de stack, checks SEO, resumen de Lighthouse (con Chrome mockeado), keywords, proveedores, caché, informes Markdown/CSV, argumentos, CLI y exportación CSV web. Los tests no requieren Chrome, red ni credenciales.
+Estructura de tests: unitarios de URL/SSRF, crawl, detección de stack, checks SEO, resumen de Lighthouse (con Chrome mockeado), keywords, proveedores, caché, informes Markdown/CSV, argumentos y CLI; validación y handler de `/api/audit`, cliente HTTP, filtros de keywords y render de componentes clave. Los tests no requieren Chrome, red ni credenciales.
+
+CI: GitHub Actions ejecuta `npm ci`, `npm run check` y `npm run build:web` en cada push y pull request.
 
 Auditoría de deuda técnica, riesgos y roadmap: [`docs/TECHNICAL-DEBT.md`](docs/TECHNICAL-DEBT.md).
 

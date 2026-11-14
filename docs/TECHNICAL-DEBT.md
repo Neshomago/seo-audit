@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-11-13
 
-**Actualización:** 2026-11-14 — baseline revalidado tras la feature de keywords (83 tests / 12 archivos).
+**Actualización:** 2026-11-14 — baseline revalidado tras keywords, tests de API/UI y CI (108 tests / 18 archivos).
 
 **Alcance:** repositorio `seo-audit` en su estado MVP inicial y primera iteración de keywords.
 
@@ -16,8 +16,9 @@ No es un pentest ni una auditoría legal. Las conclusiones de seguridad se basan
 | --- | --- |
 | `npm run typecheck` | Correcto en `core`, `cli` y `web` |
 | `npm run lint` | Correcto (ESLint 10 + typescript-eslint) |
-| `npm test` | **83 tests / 12 archivos** en verde |
+| `npm test` | **108 tests / 18 archivos** en verde |
 | `npm run build:web` | Correcto (Vite 8.3.8) |
+| CI | GitHub Actions con `npm ci`, `npm run check` y `npm run build:web` |
 | `npm audit --omit=dev` | **0 vulnerabilidades** de producción |
 | `npm audit` | **9 moderadas**, todas en cadena de desarrollo ESLint/minimatch |
 | `TODO/FIXME/HACK/XXX` | Sin coincidencias en el código fuente |
@@ -33,8 +34,8 @@ Los tests no requieren Chrome ni red. El smoke real se ejecutó manualmente con 
 | TD-02 | Media | Arquitectura / packaging | El core exporta TypeScript fuente; el plugin Vite lo importa por ruta relativa y no hay build publicable | Pendiente |
 | TD-03 | Media (alta si se expone) | Seguridad | El guard SSRF no cubre redirecciones ni subpeticiones dentro de Chrome | Pendiente / riesgo aceptado en local |
 | TD-04 | Media | Ética / operación | No se respetan las directivas `Disallow` de `robots.txt` | Pendiente |
-| TD-05 | Media | Calidad | No hay CI; los checks dependen de ejecución manual | Pendiente |
-| TD-06 | Media | Testing | No hay tests de la UI ni del endpoint `/api/audit`; solo hay tests de exportación CSV web | Parcial |
+| TD-05 | Media | Calidad | No hay CI; los checks dependen de ejecución manual | **Resuelto** |
+| TD-06 | Media | Testing | No hay tests de la UI ni del endpoint `/api/audit`; solo hay tests de exportación CSV web | **Resuelto** (cobertura inicial) |
 | TD-07 | Media | Legal | No existe archivo `LICENSE`; el repositorio no está preparado para publicación | Pendiente (decisión) |
 | TD-08 | Baja | UX / API | Sin cancelación ni timeout de la petición del cliente; errores de cliente mejorables | Parcial |
 | TD-09 | Baja | Dependencias | `vite` estaba declarado en la raíz sin uso directo | **Resuelto** |
@@ -46,7 +47,7 @@ Los tests no requieren Chrome ni red. El smoke real se ejecutó manualmente con 
 | TD-15 | Baja | Precisión | Lighthouse se ejecuta una sola vez; variabilidad entre ejecuciones | Aceptado |
 | TD-16 | Baja | Tooling | Sin política explícita de encoding/finales de línea | **Resuelto** |
 
-Prioridad recomendada: TD-03 y TD-07 antes de exponer el repositorio o la API; TD-02 y TD-05 antes de publicar paquetes o colaborar; el resto puede entrar en el backlog normal.
+Prioridad recomendada: TD-03 y TD-07 antes de exponer el repositorio o la API; TD-02 antes de publicar paquetes o colaborar; el resto puede entrar en el backlog normal. TD-05 y TD-06 ya están resueltos.
 
 ## 3. Detalle de hallazgos
 
@@ -113,31 +114,30 @@ Prioridad recomendada: TD-03 y TD-07 antes de exponer el repositorio o la API; T
 
 **Esfuerzo:** S/M. **Prioridad:** antes de usar la herramienta a escala.
 
-### TD-05 — Sin integración continua (Media)
+### TD-05 — Sin integración continua (Media) — Resuelto
 
-**Evidencia:** no existe `.github/workflows/` ni configuración equivalente. Los checks se ejecutan a mano (`npm run check`).
+**Evidencia:** no existía `.github/workflows/` ni configuración equivalente; los checks se ejecutaban a mano.
 
-**Impacto:** regresiones de tipos, lint o tests pueden llegar a `main`; el build de la web no se valida en cada cambio.
+**Solución aplicada:** workflow `.github/workflows/ci.yml` con Node 24, cache de npm, `npm ci`, `npm run check` y `npm run build:web` en cada push y pull request.
 
-**Recomendación:** workflow de GitHub Actions con Node 24:
+**Verificación:** el workflow usa los mismos comandos que se ejecutan en local; no requiere Chrome, red externa ni credenciales.
 
-```yaml
-- npm ci
-- npm run check
-- npm run build:web
-```
+**Pendiente opcional:** smoke test sin Chrome en CI y gate de `npm audit --omit=dev`. No ejecutar Lighthouse real en CI.
 
-Añadir cache de npm y, opcionalmente, un smoke test sin Chrome para el core. No ejecutar Lighthouse real en CI.
+### TD-06 — Capa web sin tests (Media) — Resuelto (cobertura inicial)
 
-**Esfuerzo:** S. **Prioridad:** antes de abrir el repositorio a colaboración.
+**Evidencia:** los 108 tests cubren core, CLI y la capa web. Se añadieron:
 
-### TD-06 — Capa web sin tests (Media) — Parcial
+- `apps/web/server/audit-request.test.ts`: defaults, URL, clamp de páginas, booleanos, locale y límites de negativas.
+- `apps/web/server/audit-api.test.ts`: 405, URL ausente, JSON inválido, cuerpo grande (413), payload normalizado, `UnsafeUrlError` y error genérico.
+- `apps/web/src/api.test.ts`: envío de la petición y mensajes de error.
+- `apps/web/src/keywords-filter.test.ts`: búsqueda, intención y fuente.
+- `apps/web/src/components/*.test.tsx`: render estático de `AuditForm` y `KeywordsPanel`.
+- `apps/web/src/keywords-csv.test.ts`: exportación CSV y protección de fórmulas.
 
-**Evidencia:** los 83 tests cubren core, CLI y dos casos de exportación CSV web (`apps/web/src/keywords-csv.test.ts`). No hay tests para el resto de `apps/web/src/*` ni para `server/audit-api.ts`.
+**Límite actual:** no hay tests de interacción DOM ni E2E; los componentes se validan con `renderToStaticMarkup`. Si la UI crece, añadir Vitest + Testing Library y, opcionalmente, Playwright.
 
-**Impacto:** cambios en contratos (`AuditData`, opciones de keywords), validación de `maxPages`/locale/negativas, estados de carga/error o descarga del informe pueden romper la UI sin detección.
-
-**Recomendación:** extraer el handler de la API a una función testeable (req/res o función pura), añadir tests de validación (método, URL ausente, URL insegura, cuerpo grande, clamp de páginas, locale inválido, límite de negativas) y tests de componentes con Vitest + Testing Library. Un E2E con Playwright es opcional.
+**Impacto restante:** bajo. Los contratos y errores principales están cubiertos; los flujos visuales completos dependen de smoke manual.
 
 **Esfuerzo:** M. **Prioridad:** después de CI.
 
@@ -157,11 +157,11 @@ Añadir cache de npm y, opcionalmente, un smoke test sin Chrome para el core. No
 
 - `apps/web/src/api.ts` usa `fetch` sin `AbortController`; no hay botón de cancelar.
 - `handleAudit` bloquea el formulario hasta que termina; una auditoría de 30 páginas puede durar minutos.
-- `audit-api.ts` ya devuelve `400` para `UnsafeUrlError`, pero el resto de errores (JSON inválido, cuerpo demasiado grande) devuelve `500`.
+- `audit-api.ts` ya devuelve `400` para `UnsafeUrlError` y JSON inválido, `405` para método incorrecto y `413` para cuerpos mayores de 16 KiB. El resto de errores devuelve `500`.
 
-**Impacto:** el usuario no puede cancelar, no hay progreso en la UI y algunos errores de cliente se presentan como fallos del servidor.
+**Impacto:** el usuario no puede cancelar y no hay progreso en la UI; los errores de cliente principales ya están corregidos.
 
-**Recomendación:** añadir `AbortController` y botón de cancelar; mapear `SyntaxError`/cuerpo grande a `400`/`413`; opcionalmente, progreso vía SSE o polling de trabajos. Para uso local no es bloqueante.
+**Recomendación restante:** añadir `AbortController` y botón de cancelar; opcionalmente, progreso vía SSE o polling de trabajos. Para uso local no es bloqueante.
 
 **Esfuerzo:** S/M. **Prioridad:** baja.
 
@@ -260,7 +260,7 @@ Añadir cache de npm y, opcionalmente, un smoke test sin Chrome para el core. No
 | Crawl de rutas no permitidas | Media | Medio | Límite de páginas y mismo host | TD-04 |
 | Dependencia de Chrome instalado | Alta | Bajo | Detección de rutas + error controlado | Mensaje claro (implementado) |
 | Variabilidad de Lighthouse | Alta | Bajo | Documentado | Modo multi-run opcional |
-| Regresiones sin CI | Media | Medio | `npm run check` manual | TD-05 |
+| Regresiones sin CI | Baja | Medio | GitHub Actions con `check` y build | Mantener workflow |
 | Publicación sin licencia | Media | Medio | README lo advierte | TD-07 |
 | Vulnerabilidades de tooling | Baja | Bajo | Solo dev; sin fix incompatible | Monitorizar TD-11 |
 
@@ -269,16 +269,14 @@ Añadir cache de npm y, opcionalmente, un smoke test sin Chrome para el core. No
 ### Antes de publicar el repositorio
 
 1. **TD-07**: decidir y añadir `LICENSE`.
-2. **TD-05**: añadir CI (`npm ci`, `npm run check`, `npm run build:web`).
-3. **TD-02**: empaquetar el core o documentar claramente que se consume como fuente.
-4. **TD-03**: implementar intercepción de requests en Puppeteer o dejar explícito que la API es solo local y no debe exponerse.
+2. **TD-02**: empaquetar el core o documentar claramente que se consume como fuente.
+3. **TD-03**: implementar intercepción de requests en Puppeteer o dejar explícito que la API es solo local y no debe exponerse.
 
 ### Siguiente iteración
 
-5. **TD-06**: tests del handler de la API y de componentes clave.
-6. **TD-08**: cancelación/timeout en la UI y códigos HTTP correctos.
-7. **TD-04**: respeto de `robots.txt` y rate limit configurable.
-8. **TD-10**: extraer utilidades y fixtures compartidos.
+4. **TD-08**: cancelación/timeout en la UI.
+5. **TD-04**: respeto de `robots.txt` y rate limit configurable.
+6. **TD-10**: extraer utilidades y fixtures compartidos.
 
 ### Mejoras posteriores
 

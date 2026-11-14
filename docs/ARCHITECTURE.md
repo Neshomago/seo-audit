@@ -79,7 +79,7 @@ El sistema hace peticiones HTTP al sitio auditado, habla con Chrome vía CDP en 
 |                     v                                                   |
 |  server/audit-api.ts (middleware Vite, dev y preview)                  |
 |    - valida método y cuerpo (16 KiB)                                    |
-|    - maxPages 1..30, lighthouse, keywords, locale, negativas, allowPrivate|
+|    - audit-request.ts normaliza maxPages, lighthouse, keywords, locale, negativas y allowPrivate|
 |    - inspectSite() -> toAuditData() + renderMarkdownReport()           |
 +----------------------------------+-------------------------------------+
                                    |
@@ -233,8 +233,9 @@ Pasos:
 | `pipeline.ts` | Orquestación completa | `InspectResult` |
 | `packages/cli/src/args.ts` | Parseo de flags y rutas de salida | `CliOptions` |
 | `packages/cli/src/index.ts` | Ejecutar, progresar, escribir y reportar | código de salida |
-| `apps/web/server/audit-api.ts` | Endpoint local `POST /api/audit` | `AuditResponse` |
-| `apps/web/src/*` | Formulario, resumen, paneles, tabla y descarga | UI |
+| `apps/web/server/audit-request.ts` | Validación y normalización pura del payload | `AuditPayload` |
+| `apps/web/server/audit-api.ts` | Endpoint local `POST /api/audit`, errores HTTP y middleware | `AuditResponse` |
+| `apps/web/src/*` | Formulario, resumen, paneles, filtros, tabla y descarga | UI |
 
 ## 6. Contratos de datos
 
@@ -459,12 +460,15 @@ Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** 
 
 ## 13. Testing
 
-- **Unitarios** (Vitest): URL/SSRF, crawl, stack, checks SEO, resumen de Lighthouse con Chrome mockeado, keywords (motor y proveedores), caché, Markdown/CSV, argumentos, CLI y exportación CSV web.
+- **Unitarios** (Vitest): URL/SSRF, crawl, stack, checks SEO, resumen de Lighthouse con Chrome mockeado, keywords (motor y proveedores), caché, Markdown/CSV, argumentos y CLI.
+- **API**: validación pura del payload, handler con request/response simulados, códigos 400/405/413/500 y errores de `inspectSite`.
+- **UI**: cliente `runAudit`, filtros de keywords y render estático de `AuditForm` y `KeywordsPanel`.
 - Los tests no requieren Chrome, red ni credenciales.
 - **Smoke manual** con `npm run smoke` y auditorías reales con `npm run audit`.
 - Lighthouse se mockea con `vi.hoisted` para evitar `spawn ENOENT` y tests frágiles.
 - GSC y Bing se mockean con `fetch` inyectado; no se llaman APIs reales en tests.
-- El handler de la API y los componentes React no tienen tests automatizados todavía (TD-06).
+- No hay E2E de navegador; `AuditForm` y `KeywordsPanel` se cubren con render estático, no con interacción DOM.
+- CI en GitHub Actions ejecuta `npm ci`, `npm run check` y `npm run build:web`.
 
 ## 14. Operación
 

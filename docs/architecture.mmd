@@ -1,0 +1,40 @@
+%% SEO Audit - diagrama de arquitectura
+%% Visualizar con GitHub/GitLab, mermaid-cli (mmdc) o cualquier editor compatible.
+flowchart TD
+  subgraph Clientes
+    UI["UI React<br/>apps/web/src"]
+    CLI["CLI<br/>packages/cli"]
+  end
+
+  UI -->|"POST /api/audit"| API["Plugin Vite<br/>apps/web/server/audit-api.ts"]
+  CLI --> RUN["runCli"]
+
+  API --> PIPE["inspectSite<br/>packages/core/src/pipeline.ts"]
+  RUN --> PIPE
+
+  PIPE --> GUARD["normalizeUrl + assertSafeUrl<br/>guard SSRF"]
+  PIPE --> PROBE["probeUrl / probeSite"]
+  PIPE --> BROWSER["launchBrowser<br/>Puppeteer + Chrome"]
+  PIPE --> DETECT["detectStack"]
+  PIPE --> SEO["analyzeSeo"]
+  PIPE --> LH["runLighthouse"]
+
+  PROBE --> HTTP["HTTP fetch<br/>redirects manuales"]
+  PROBE --> SITE["robots.txt + sitemap"]
+
+  BROWSER --> RENDER["renderPage"]
+  RENDER --> CRAWL["crawlSite BFS<br/>mismo host, maxPages"]
+
+  RENDER --> DETECT
+  CRAWL --> SEO
+  DETECT --> SEO
+  PROBE --> SEO
+  SITE --> SEO
+
+  LH --> CHROME2["Chrome aparte<br/>chrome-launcher"]
+  SEO --> REPORT["renderMarkdownReport / toAuditData"]
+  DETECT --> REPORT
+  LH --> REPORT
+
+  REPORT --> MD[".md"]
+  REPORT --> JSON[".json"]

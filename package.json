@@ -1,0 +1,35 @@
+{
+  "name": "seo-audit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Auditor SEO fullstack local (CLI + UI)",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "smoke": "tsx packages/core/src/smoke.ts",
+    "audit": "tsx packages/cli/src/cli.ts",
+    "dev": "npm run dev --workspace @seo-audit/web",
+    "build:web": "npm run build --workspace @seo-audit/web",
+    "preview": "npm run preview --workspace @seo-audit/web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.14.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}

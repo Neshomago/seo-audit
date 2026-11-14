@@ -12,7 +12,6 @@ import type {
   KeywordReport,
   KeywordSource,
   NegativeKeyword,
-  ProviderKeywordRow,
 } from './types.js';
 
 const FIELD_WEIGHTS: Record<KeywordField, number> = {
@@ -313,6 +312,7 @@ export function analyzeKeywords(input: AnalyzeKeywordsInput): KeywordReport {
   const country = input.country ?? 'ES';
   const now = input.now ?? new Date();
   const providerResults = input.providerResults ?? [];
+  const period = input.period ?? providerResults.find((result) => result.period)?.period ?? null;
   const items = collectOnPage(input.pages, locale);
   mergeProviderRows(items, providerResults);
 
@@ -377,7 +377,7 @@ export function analyzeKeywords(input: AnalyzeKeywordsInput): KeywordReport {
     generatedAt: now.toISOString(),
     locale,
     country,
-    period: input.period ?? null,
+    period,
     providers: providerResults.map((result) => result.status),
     positives,
     negatives,

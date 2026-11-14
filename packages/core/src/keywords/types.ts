@@ -121,6 +121,7 @@ export interface ProviderKeywordRow {
 export interface KeywordProviderResult {
   status: KeywordProviderStatus;
   rows: ProviderKeywordRow[];
+  period?: { start: string; end: string } | null;
 }
 
 export interface KeywordProviderInput {

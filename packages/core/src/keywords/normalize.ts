@@ -194,11 +194,11 @@ export function foldText(value: string): string {
   const prepared = value
     .normalize('NFKC')
     .toLocaleLowerCase('es')
-    .replace(/ñ/g, '\u0001');
+    .replace(/ñ/g, '\uE000');
   return prepared
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\u0001/g, 'ñ')
+    .replace(/\uE000/g, 'ñ')
     .replace(/[^a-z0-9ñ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

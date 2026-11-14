@@ -6,6 +6,7 @@ import { AuditForm } from './components/AuditForm';
 import { Summary } from './components/Summary';
 import { LighthousePanel } from './components/LighthousePanel';
 import { IssuesPanel } from './components/IssuesPanel';
+import { KeywordsPanel } from './components/KeywordsPanel';
 import { PagesTable } from './components/PagesTable';
 
 interface AuditResult {
@@ -75,7 +76,7 @@ export function App() {
             </div>
           </div>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
-            Local · sin servicios externos
+            Local · GSC y Bing opcionales
           </span>
         </div>
       </header>
@@ -114,7 +115,10 @@ export function App() {
               {[
                 ['Introduce la URL', 'Se audita la home y hasta 30 páginas internas del mismo dominio.'],
                 ['Rastreamos y medimos', 'Chrome renderiza cada página; Lighthouse mide rendimiento y calidad.'],
-                ['Descarga el informe', 'Obtén un Markdown con lo que funciona, los problemas y cómo mejorarlos.'],
+                [
+                  'Descarga el informe',
+                  'Obtén Markdown, JSON o CSV con problemas, oportunidades y palabras clave.',
+                ],
               ].map(([title, description], index) => (
                 <li key={title} className="rounded-xl bg-slate-50 p-4">
                   <span className="grid h-7 w-7 place-items-center rounded-full bg-indigo-600 text-xs font-semibold text-white">
@@ -203,6 +207,8 @@ export function App() {
               </section>
             </div>
 
+            <KeywordsPanel keywords={data.keywords} url={data.url} />
+
             <IssuesPanel checks={data.seo.checks} />
 
             <details className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -239,7 +245,8 @@ export function App() {
         ) : null}
 
         <footer className="pb-4 text-center text-xs text-slate-500">
-          Auditoría local con tu propia instalación de Chrome. No se envían datos a terceros.
+          Auditoría local con tu propia instalación de Chrome. GSC y Bing solo se consultan para
+          propiedades verificadas cuando hay credenciales configuradas.
         </footer>
       </main>
     </div>

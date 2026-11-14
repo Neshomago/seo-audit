@@ -7,6 +7,9 @@ export interface AuditRequest {
   maxPages: number;
   lighthouse: boolean;
   allowPrivate: boolean;
+  keywords: boolean;
+  keywordLocale: string;
+  negativeTerms: string[];
 }
 
 export interface AuditResponse {

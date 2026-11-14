@@ -8,6 +8,8 @@ import {
 } from '../../../packages/core/src/index.js';
 
 const MAX_BODY_BYTES = 16_384;
+const KEYWORD_LOCALES = new Set(['es-ES', 'en-US']);
+const MAX_NEGATIVE_TERMS = 50;
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
@@ -44,6 +46,19 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
+function keywordLocale(value: unknown): string {
+  return typeof value === 'string' && KEYWORD_LOCALES.has(value) ? value : 'es-ES';
+}
+
+function negativeTerms(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((term): term is string => typeof term === 'string')
+    .map((term) => term.replace(/\s+/g, ' ').trim().slice(0, 80))
+    .filter(Boolean)
+    .slice(0, MAX_NEGATIVE_TERMS);
+}
+
 async function handleAudit(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') {
     sendJson(res, 405, { error: 'Método no permitido.' });
@@ -62,6 +77,13 @@ async function handleAudit(req: IncomingMessage, res: ServerResponse): Promise<v
       maxPages: clampInt(payload.maxPages, 10, 1, 30),
       lighthouse: payload.lighthouse !== false,
       allowPrivateHosts: payload.allowPrivate === true,
+      keywords:
+        payload.keywords === false
+          ? false
+          : {
+              locale: keywordLocale(payload.keywordLocale),
+              negativeTerms: negativeTerms(payload.negativeTerms),
+            },
     });
 
     sendJson(res, 200, {

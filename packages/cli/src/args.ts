@@ -120,7 +120,12 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--negative': {
         const value = inlineValue ?? argv[index + 1];
         if (!value) throw new UsageError('Falta el valor de --negative.');
-        options.negativeTerms.push(value);
+        options.negativeTerms.push(
+          ...value
+            .split(',')
+            .map((term) => term.trim())
+            .filter(Boolean),
+        );
         if (inlineValue === undefined) index += 1;
         break;
       }

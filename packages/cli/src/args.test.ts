@@ -34,7 +34,7 @@ describe('parseArgs', () => {
       '--refresh-keywords',
       '--csv',
       '--negative',
-      'curso gratis',
+      'curso gratis,gratis',
       '--negative=empleo',
     ]);
 
@@ -49,7 +49,7 @@ describe('parseArgs', () => {
     expect(options.country).toBe('US');
     expect(options.refreshKeywords).toBe(true);
     expect(options.csv).toBe(true);
-    expect(options.negativeTerms).toEqual(['curso gratis', 'empleo']);
+    expect(options.negativeTerms).toEqual(['curso gratis', 'gratis', 'empleo']);
   });
 
   it('rechaza URL ausente, opciones desconocidas y valores inválidos', () => {

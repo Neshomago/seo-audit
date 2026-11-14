@@ -6,6 +6,7 @@ export * from './render.js';
 export * from './detect/stack.js';
 export * from './crawl.js';
 export * from './seo/index.js';
+export * from './keywords/index.js';
 export * from './perf/lighthouse.js';
 export * from './report/markdown.js';
 export * from './report/json.js';

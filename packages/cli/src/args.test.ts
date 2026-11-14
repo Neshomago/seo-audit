@@ -10,6 +10,10 @@ describe('parseArgs', () => {
       lighthouse: true,
       allowPrivate: false,
       json: false,
+      keywords: true,
+      refreshKeywords: false,
+      csv: false,
+      negativeTerms: [],
       help: false,
     });
   });
@@ -24,6 +28,14 @@ describe('parseArgs', () => {
       '--no-lighthouse',
       '--allow-private',
       '--json',
+      '--no-keywords',
+      '--locale=en-US',
+      '--country=us',
+      '--refresh-keywords',
+      '--csv',
+      '--negative',
+      'curso gratis',
+      '--negative=empleo',
     ]);
 
     expect(options.maxPages).toBe(5);
@@ -32,6 +44,12 @@ describe('parseArgs', () => {
     expect(options.lighthouse).toBe(false);
     expect(options.allowPrivate).toBe(true);
     expect(options.json).toBe(true);
+    expect(options.keywords).toBe(false);
+    expect(options.locale).toBe('en-US');
+    expect(options.country).toBe('US');
+    expect(options.refreshKeywords).toBe(true);
+    expect(options.csv).toBe(true);
+    expect(options.negativeTerms).toEqual(['curso gratis', 'empleo']);
   });
 
   it('rechaza URL ausente, opciones desconocidas y valores inválidos', () => {
@@ -39,6 +57,8 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['https://example.com', '--desconocida'])).toThrow(UsageError);
     expect(() => parseArgs(['https://example.com', '--max-pages', '0'])).toThrow(UsageError);
     expect(() => parseArgs(['https://example.com', '--out'])).toThrow(UsageError);
+    expect(() => parseArgs(['https://example.com', '--locale'])).toThrow(UsageError);
+    expect(() => parseArgs(['https://example.com', '--negative'])).toThrow(UsageError);
     expect(() => parseArgs(['https://a.com', 'https://b.com'])).toThrow(UsageError);
   });
 });

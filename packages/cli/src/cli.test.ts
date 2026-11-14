@@ -9,6 +9,7 @@ describe('runCli', () => {
     expect(code).toBe(0);
     expect(logs.join('\n')).toContain('Uso: seo-audit <url>');
     expect(logs.join('\n')).toContain('--max-pages');
+    expect(logs.join('\n')).toContain('--no-keywords');
   });
 
   it('devuelve código 2 si faltan argumentos', async () => {

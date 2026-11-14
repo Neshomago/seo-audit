@@ -4,6 +4,8 @@ import {
   inspectSite,
   renderMarkdownReport,
   toAuditData,
+  toNegativeKeywordsCsv,
+  toPositiveKeywordsCsv,
   type CrawlProgress,
   type CrawledPage,
   type InspectResult,
@@ -22,6 +24,12 @@ Opciones:
   --max-pages N       Páginas internas a rastrear (por defecto 10).
   --out RUTA          Archivo .md o carpeta de salida (por defecto reports/).
   --json              Escribe también un JSON con los datos de la auditoría.
+  --csv               Escribe CSV de keywords positivas y negativas.
+  --no-keywords       Omite el análisis de palabras clave.
+  --locale TAG        Idioma del análisis de keywords (por defecto es-ES).
+  --country CODE      País del análisis de keywords (por defecto ES).
+  --negative TEXTO    Añade una keyword negativa (repetible).
+  --refresh-keywords  Ignora la caché de GSC/Bing.
   --no-lighthouse     Omite la medición de rendimiento con Lighthouse.
   --timeout MS        Tiempo máximo por petición y navegación (ms).
   --allow-private     Permite auditar hosts privados o locales (¡solo en desarrollo!).
@@ -47,7 +55,12 @@ async function writeReport(
   options: CliOptions,
   result: InspectResult,
   generatedAt: Date,
-): Promise<{ reportPath: string; jsonPath: string | null }> {
+): Promise<{
+  reportPath: string;
+  jsonPath: string | null;
+  positiveCsvPath: string | null;
+  negativeCsvPath: string | null;
+}> {
   const fileName = reportFileName(result.probe.finalUrl || options.url, generatedAt);
   const reportPath = resolve(resolveReportPath(options.output, fileName));
   const markdown = renderMarkdownReport(result, { generatedAt });
@@ -55,14 +68,27 @@ async function writeReport(
   await mkdir(dirname(reportPath), { recursive: true });
   await writeFile(reportPath, markdown, 'utf8');
 
-  if (!options.json) return { reportPath, jsonPath: null };
+  const basePath = reportPath.toLowerCase().endsWith('.md')
+    ? reportPath.slice(0, -3)
+    : reportPath;
+  let jsonPath: string | null = null;
+  let positiveCsvPath: string | null = null;
+  let negativeCsvPath: string | null = null;
 
-  const jsonPath = reportPath.toLowerCase().endsWith('.md')
-    ? `${reportPath.slice(0, -3)}.json`
-    : `${reportPath}.json`;
-  const data = toAuditData(result, generatedAt);
-  await writeFile(jsonPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
-  return { reportPath, jsonPath };
+  if (options.json) {
+    jsonPath = `${basePath}.json`;
+    const data = toAuditData(result, generatedAt);
+    await writeFile(jsonPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+  }
+
+  if (options.csv && result.keywords) {
+    positiveCsvPath = `${basePath}-keywords.csv`;
+    negativeCsvPath = `${basePath}-negative-keywords.csv`;
+    await writeFile(positiveCsvPath, toPositiveKeywordsCsv(result.keywords), 'utf8');
+    await writeFile(negativeCsvPath, toNegativeKeywordsCsv(result.keywords), 'utf8');
+  }
+
+  return { reportPath, jsonPath, positiveCsvPath, negativeCsvPath };
 }
 
 export async function runCli(argv: string[], deps: RunCliDeps = {}): Promise<number> {
@@ -100,16 +126,39 @@ export async function runCli(argv: string[], deps: RunCliDeps = {}): Promise<num
       allowPrivateHosts: options.allowPrivate,
       timeoutMs: options.timeoutMs,
       lighthouse: options.lighthouse,
+      keywords: options.keywords
+        ? {
+            locale: options.locale,
+            country: options.country,
+            refresh: options.refreshKeywords,
+            negativeTerms: options.negativeTerms,
+          }
+        : false,
       onPage,
     });
 
     const generatedAt = now();
-    const { reportPath, jsonPath } = await writeReport(options, result, generatedAt);
+    const { reportPath, jsonPath, positiveCsvPath, negativeCsvPath } = await writeReport(
+      options,
+      result,
+      generatedAt,
+    );
     const seconds = ((Date.now() - started) / 1000).toFixed(1).replace('.', ',');
     const { pass, warn, fail } = result.seo.summary;
 
     log(`Auditoría completada en ${seconds} s.`);
     log(`Comprobaciones: ${pass} correctas, ${warn} avisos, ${fail} fallos.`);
+
+    if (result.keywords) {
+      log(
+        `Keywords: ${result.keywords.summary.positives} oportunidades, ${result.keywords.summary.negatives} negativas, ${result.keywords.summary.externalSources} fuentes externas.`,
+      );
+      for (const provider of result.keywords.providers) {
+        if (provider.status !== 'ok' && provider.status !== 'partial') {
+          log(`Keywords ${provider.provider.toUpperCase()}: ${provider.status} — ${provider.message}`);
+        }
+      }
+    }
 
     if (result.lighthouse && !result.lighthouse.error) {
       const { scores } = result.lighthouse;
@@ -122,6 +171,8 @@ export async function runCli(argv: string[], deps: RunCliDeps = {}): Promise<num
 
     log(`Informe: ${reportPath}`);
     if (jsonPath) log(`JSON: ${jsonPath}`);
+    if (positiveCsvPath) log(`CSV keywords: ${positiveCsvPath}`);
+    if (negativeCsvPath) log(`CSV negativas: ${negativeCsvPath}`);
     return 0;
   } catch (runError) {
     error(runError instanceof Error ? runError.message : String(runError));

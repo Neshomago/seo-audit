@@ -10,6 +10,12 @@ export interface CliOptions {
   allowPrivate: boolean;
   timeoutMs?: number;
   json: boolean;
+  keywords: boolean;
+  locale?: string;
+  country?: string;
+  refreshKeywords: boolean;
+  csv: boolean;
+  negativeTerms: string[];
   help: boolean;
 }
 
@@ -35,6 +41,10 @@ export function parseArgs(argv: string[]): CliOptions {
     lighthouse: true,
     allowPrivate: false,
     json: false,
+    keywords: true,
+    refreshKeywords: false,
+    csv: false,
+    negativeTerms: [],
     help: false,
   };
 
@@ -84,6 +94,36 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--json':
         options.json = true;
         break;
+      case '--no-keywords':
+        options.keywords = false;
+        break;
+      case '--locale': {
+        const value = inlineValue ?? argv[index + 1];
+        if (!value) throw new UsageError('Falta el valor de --locale.');
+        options.locale = value;
+        if (inlineValue === undefined) index += 1;
+        break;
+      }
+      case '--country': {
+        const value = inlineValue ?? argv[index + 1];
+        if (!value) throw new UsageError('Falta el valor de --country.');
+        options.country = value.toUpperCase();
+        if (inlineValue === undefined) index += 1;
+        break;
+      }
+      case '--refresh-keywords':
+        options.refreshKeywords = true;
+        break;
+      case '--csv':
+        options.csv = true;
+        break;
+      case '--negative': {
+        const value = inlineValue ?? argv[index + 1];
+        if (!value) throw new UsageError('Falta el valor de --negative.');
+        options.negativeTerms.push(value);
+        if (inlineValue === undefined) index += 1;
+        break;
+      }
       default:
         throw new UsageError(`Opción desconocida: ${flag}.`);
     }

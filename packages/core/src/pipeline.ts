@@ -1,5 +1,12 @@
 import { crawlSite, type CrawlProgress, type CrawlResult, type CrawledPage } from './crawl.js';
 import { detectStack, type StackReport } from './detect/stack.js';
+import {
+  analyzeKeywords,
+  loadKeywordProviders,
+  readKeywordConfig,
+  type KeywordOptions,
+  type KeywordReport,
+} from './keywords/index.js';
 import { runLighthouse, type LighthouseResult } from './perf/lighthouse.js';
 import { probeSite, probeUrl, type ProbeOptions } from './probe.js';
 import { launchBrowser, renderPage } from './render.js';
@@ -13,6 +20,7 @@ export interface InspectOptions extends UrlGuardOptions {
   maxPages?: number;
   lighthouse?: boolean;
   chromePath?: string;
+  keywords?: boolean | KeywordOptions;
   onPage?: (page: CrawledPage, progress: CrawlProgress) => void;
 }
 
@@ -24,6 +32,7 @@ export interface InspectResult {
   crawl: CrawlResult;
   seo: SiteSeoResult;
   lighthouse?: LighthouseResult;
+  keywords?: KeywordReport | null;
 }
 
 interface RenderedInspection {
@@ -108,5 +117,41 @@ export async function inspectSite(
           timeoutMs: options.timeoutMs,
         });
 
-  return { probe, site, page, stack, crawl, seo, lighthouse };
+  let keywords: KeywordReport | null = null;
+
+  if (options.keywords !== false) {
+    try {
+      const keywordOptions = options.keywords === true || options.keywords === undefined
+        ? {}
+        : options.keywords;
+      const config = readKeywordConfig(keywordOptions);
+      const host = new URL(probe.finalUrl).host;
+      const now = new Date();
+      const providerResults = await loadKeywordProviders(config, {
+        host,
+        finalUrl: probe.finalUrl,
+        locale: config.locale,
+        country: config.country,
+        now,
+        refresh: config.refresh,
+        cacheDir: config.cacheDir,
+        timeoutMs: config.timeoutMs,
+        fetchImpl: fetch,
+      });
+
+      keywords = analyzeKeywords({
+        pages: crawl.pages,
+        host,
+        locale: config.locale,
+        country: config.country,
+        negativeTerms: config.negativeTerms,
+        now,
+        providerResults,
+      });
+    } catch {
+      keywords = null;
+    }
+  }
+
+  return { probe, site, page, stack, crawl, seo, lighthouse, keywords };
 }

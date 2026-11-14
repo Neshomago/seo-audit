@@ -10,4 +10,5 @@ export * from './keywords/index.js';
 export * from './perf/lighthouse.js';
 export * from './report/markdown.js';
 export * from './report/json.js';
+export * from './report/keywords-csv.js';
 export * from './pipeline.js';

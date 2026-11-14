@@ -1,4 +1,5 @@
 import type { InspectResult } from '../pipeline.js';
+import type { KeywordCandidate, KeywordMetrics } from '../keywords/types.js';
 import type { LighthouseAudit, LighthouseMetric } from '../perf/lighthouse.js';
 import type { CheckStatus, SeoCheck, Severity } from '../seo/types.js';
 
@@ -224,6 +225,72 @@ function renderPagesSection(result: InspectResult): string[] {
   return lines;
 }
 
+function formatKeywordMetrics(metrics: KeywordMetrics | undefined): string {
+  if (!metrics) return '—';
+  return `${Math.round(metrics.impressions)} imp. · pos. ${metrics.position.toFixed(1).replace('.', ',')}`;
+}
+
+function renderKeywordsSection(result: InspectResult): string[] {
+  const keywords = result.keywords;
+  if (!keywords) return [];
+
+  const lines = [
+    '## Palabras clave y oportunidades',
+    '',
+    `- **Idioma/país:** ${keywords.locale} / ${keywords.country}`,
+    `- **Periodo de datos externos:** ${keywords.period ? `${keywords.period.start} a ${keywords.period.end}` : 'solo datos on-page'}`,
+    `- **Resumen:** ${plural(keywords.summary.positives, 'oportunidad', 'oportunidades')}, ${plural(keywords.summary.negatives, 'negativa', 'negativas')} y ${plural(keywords.summary.clusters, 'cluster', 'clusters')}.`,
+    `- **Fuentes:** ${keywords.providers.length > 0 ? keywords.providers.map((provider) => `${provider.provider.toUpperCase()}: ${provider.status} (${provider.rows})`).join(' · ') : 'solo on-page'}`,
+    '',
+    '### Oportunidades prioritarias',
+    '',
+  ];
+
+  if (keywords.positives.length === 0) {
+    lines.push('No se detectaron oportunidades con las señales disponibles.');
+  } else {
+    lines.push(
+      '| Keyword | Intención | Score | Confianza | Fuentes | GSC | Bing | Página recomendada | Acción |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+      ...keywords.positives.slice(0, 15).map((candidate: KeywordCandidate) =>
+        `| ${cell(candidate.keyword, 45)} | ${candidate.intent} | ${candidate.score} | ${candidate.confidence} | ${candidate.sources.join(', ')} | ${cell(formatKeywordMetrics(candidate.gsc), 35)} | ${cell(formatKeywordMetrics(candidate.bing), 35)} | ${cell(candidate.recommendedPage ?? '—', 50)} | ${cell(candidate.action, 40)} |`,
+      ),
+    );
+  }
+
+  const cannibalization = keywords.positives.filter((candidate) => candidate.cannibalization.length > 1);
+  if (cannibalization.length > 0) {
+    lines.push('', '### Posible canibalización', '');
+    for (const candidate of cannibalization.slice(0, 5)) {
+      lines.push(
+        `- **${candidate.keyword}:** ${candidate.cannibalization.map((url) => code(url, 90)).join(', ')}`,
+      );
+    }
+  }
+
+  lines.push('', '### Negativas sugeridas', '');
+  if (keywords.negatives.length === 0) {
+    lines.push('No se detectaron negativas con las reglas actuales.');
+  } else {
+    lines.push(
+      '| Negativa | Motivo | Confianza | Coincidencia |',
+      '| --- | --- | --- | --- |',
+      ...keywords.negatives.slice(0, 10).map((negative) =>
+        `| ${cell(negative.keyword, 45)} | ${cell(negative.reason, 60)} | ${negative.confidence} | ${negative.matchType} |`,
+      ),
+    );
+  }
+
+  lines.push(
+    '',
+    '### Fuentes y limitaciones de keywords',
+    '',
+    ...keywords.limitations.map((limitation) => `- ${limitation}`),
+  );
+
+  return lines;
+}
+
 function renderAnnex(result: InspectResult): string[] {
   const { probe, site } = result;
   const redirects =
@@ -300,6 +367,12 @@ export function renderMarkdownReport(
     lines.push(`- Lighthouse: no se pudo completar (${inline(result.lighthouse.error)}).`);
   }
 
+  if (result.keywords) {
+    lines.push(
+      `- Keywords: ${plural(result.keywords.summary.positives, 'oportunidad on-page', 'oportunidades')} y ${plural(result.keywords.summary.negatives, 'negativa sugerida', 'negativas sugeridas')}.`,
+    );
+  }
+
   lines.push('', '### Hallazgos prioritarios', '');
   if (fails.length === 0) {
     lines.push('No se encontraron fallos bloqueantes en las comprobaciones automáticas.');
@@ -357,6 +430,7 @@ export function renderMarkdownReport(
   lines.push(...renderLighthouseSection(result), '');
   lines.push(...renderQualitySection(result), '');
   lines.push(...renderPagesSection(result), '');
+  lines.push(...renderKeywordsSection(result), '');
 
   lines.push('## Plan de acción priorizado', '');
   if (issues.length === 0) {

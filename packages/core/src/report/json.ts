@@ -1,5 +1,6 @@
 import type { CrawlError } from '../crawl.js';
 import type { StackReport } from '../detect/stack.js';
+import type { KeywordReport } from '../keywords/types.js';
 import type { LighthouseResult } from '../perf/lighthouse.js';
 import type { InspectResult } from '../pipeline.js';
 import type { SiteSeoResult } from '../seo/types.js';
@@ -20,6 +21,7 @@ export interface AuditData {
   stack: StackReport;
   seo: SiteSeoResult;
   lighthouse: LighthouseResult | null;
+  keywords: KeywordReport | null;
   crawl: {
     host: string;
     elapsedMs: number;
@@ -43,6 +45,7 @@ export function toAuditData(result: InspectResult, generatedAt: Date = new Date(
     stack: result.stack,
     seo: result.seo,
     lighthouse: result.lighthouse ?? null,
+    keywords: result.keywords ?? null,
     crawl: {
       host: result.crawl.host,
       elapsedMs: result.crawl.elapsedMs,

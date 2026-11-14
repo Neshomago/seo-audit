@@ -49,6 +49,7 @@ export function extractPageSignals(page: CrawledPage): PageKeywordSignals {
 
   const body = $('body').clone();
   body.find('script, style, noscript, template, svg, nav, footer').remove();
+  body.find('p, li, div, section, article, h1, h2, h3').append(' ');
   const bodyText = clean(body.text()).slice(0, BODY_LIMIT);
   if (bodyText) fields.push({ kind: 'body', text: bodyText });
 

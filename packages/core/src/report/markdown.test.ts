@@ -5,6 +5,7 @@ import type { CrawledPage } from '../crawl.js';
 import type { InspectResult } from '../pipeline.js';
 import type { HttpProbe, ResourceProbe, SiteProbe } from '../types.js';
 import { createEmptyDom } from '../dom.js';
+import { analyzeKeywords } from '../keywords/analyze.js';
 import { renderMarkdownReport } from './markdown.js';
 
 const URL = 'https://example.com/';
@@ -177,6 +178,22 @@ describe('renderMarkdownReport', () => {
     expect(markdown).toContain('## Plan de acción priorizado');
     expect(markdown).toContain('## Anexo técnico');
     expect(markdown).toContain('## Limitaciones');
+  });
+
+  it('incluye la sección de palabras clave cuando hay informe', () => {
+    const result = makeResult(pageHtml(), false);
+    result.keywords = analyzeKeywords({
+      pages: result.crawl.pages,
+      host: 'example.com',
+      negativeTerms: ['curso gratis'],
+    });
+
+    const markdown = renderMarkdownReport(result, { generatedAt: '2026-11-13T12:00:00Z' });
+
+    expect(markdown).toContain('## Palabras clave y oportunidades');
+    expect(markdown).toContain('### Oportunidades prioritarias');
+    expect(markdown).toContain('### Negativas sugeridas');
+    expect(markdown).toContain('curso gratis');
   });
 
   it('indica cuando no se ejecutó Lighthouse y no hay páginas', () => {

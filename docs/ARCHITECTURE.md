@@ -13,7 +13,8 @@ Alcance del MVP:
 - Rastrear un número acotado de páginas internas del mismo host.
 - Detectar tecnologías y adaptar las recomendaciones.
 - Ejecutar Lighthouse en local.
-- Entregar un informe Markdown y, opcionalmente, JSON.
+- Analizar palabras clave on-page y, si hay credenciales y propiedad verificada, enriquecerlas con GSC y Bing.
+- Entregar un informe Markdown y, opcionalmente, JSON y CSV.
 - Ofrecer CLI y UI web sobre el mismo motor.
 
 Fuera de alcance (por decisión de diseño):
@@ -21,7 +22,7 @@ Fuera de alcance (por decisión de diseño):
 - Persistencia, histórico, cuentas de usuario o multiusuario.
 - Programación de auditorías o servicio en la nube.
 - Comparación entre ejecuciones.
-- Análisis semántico del contenido ni intención de búsqueda.
+- Volúmenes de búsqueda de pago (Google Ads/Microsoft Ads), rankings SERP o Google Trends.
 - Crawl de subdominios o dominios externos.
 
 ## 2. Contexto
@@ -63,7 +64,7 @@ Fuera de alcance (por decisión de diseño):
  +-----------------+      +-------------------+      +-------------------+
 ```
 
-El sistema no llama a APIs de terceros. Solo hace peticiones HTTP al sitio auditado y habla con Chrome vía CDP en localhost.
+El sistema hace peticiones HTTP al sitio auditado, habla con Chrome vía CDP en localhost y, solo si hay credenciales y propiedad verificada, consulta las APIs oficiales de GSC y Bing. No usa scraping ni proveedores SERP no oficiales.
 
 ## 3. Contenedores y componentes
 
@@ -72,13 +73,13 @@ El sistema no llama a APIs de terceros. Solo hace peticiones HTTP al sitio audit
 ```
 +------------------------------- apps/web --------------------------------+
 |  React 19 + Vite 8 + Tailwind 4                                        |
-|  AuditForm -> App -> Summary / LighthousePanel / IssuesPanel / PagesTable|
+|  AuditForm -> App -> Summary / LighthousePanel / KeywordsPanel / IssuesPanel / PagesTable|
 |                     |                                                   |
 |                     | fetch('/api/audit')                               |
 |                     v                                                   |
 |  server/audit-api.ts (middleware Vite, dev y preview)                  |
 |    - valida método y cuerpo (16 KiB)                                    |
-|    - maxPages 1..30, lighthouse, allowPrivate                          |
+|    - maxPages 1..30, lighthouse, keywords, locale, negativas, allowPrivate|
 |    - inspectSite() -> toAuditData() + renderMarkdownReport()           |
 +----------------------------------+-------------------------------------+
                                    |
@@ -91,14 +92,16 @@ El sistema no llama a APIs de terceros. Solo hace peticiones HTTP al sitio audit
 |  crawl.ts -------> crawlSite (BFS mismo host, dedupe, maxPages)        |
 |  detect/stack.ts -> detectStack (headers, HTML, cookies, DOM, assets)  |
 |  seo/index.ts ---> analyzeSeo (page-checks + site-checks + fixes)      |
+|  keywords/ -------> analyzeKeywords (on-page + GSC/Bing + caché)      |
 |  perf/lighthouse  -> runLighthouse (chrome-launcher + Lighthouse)      |
 |  report/markdown  -> renderMarkdownReport                             |
 |  report/json -----> toAuditData                                       |
+|  report/keywords-csv -> CSV positivas/negativas                       |
 +----------------------------------+-------------------------------------+
                                    |
 +------------------------------ packages/cli ---------------------------+
 |  args.ts -> parseArgs / reportFileName / resolveReportPath             |
-|  index.ts -> runCli (progreso, escritura .md y .json, códigos de salida)|
+|  index.ts -> runCli (progreso, escritura .md/.json/.csv, códigos de salida)|
 |  cli.ts --> entrypoint (process.argv)                                  |
 +------------------------------------------------------------------------+
 ```
@@ -126,6 +129,7 @@ flowchart TD
   PIPE --> DETECT["detectStack"]
   PIPE --> SEO["analyzeSeo"]
   PIPE --> LH["runLighthouse<br/>chrome-launcher"]
+  PIPE --> KEY["analyzeKeywords<br/>on-page + proveedores"]
 
   PROBE --> SEO
   CRAWL --> SEO
@@ -133,7 +137,11 @@ flowchart TD
   DETECT --> REPORT
   SEO --> REPORT["renderMarkdownReport / toAuditData"]
   LH --> REPORT
-  REPORT --> OUT[".md / .json"]
+  KEY --> REPORT
+  KEY -.->|"credenciales + propiedad"| GSC["GSC API"]
+  KEY -.->|"credenciales + propiedad"| BING["Bing Webmaster API"]
+  KEY --> CACHE[".cache/seo-audit"]
+  REPORT --> OUT[".md / .json / .csv"]
   API --> UI
   RUN --> OUT
 ```
@@ -152,6 +160,8 @@ sequenceDiagram
   participant D as detectStack
   participant S as analyzeSeo
   participant L as Lighthouse
+  participant K as analyzeKeywords
+  participant X as GSC / Bing
 
   U->>E: URL + opciones
   E->>P: inspectSite(url, options)
@@ -171,9 +181,13 @@ sequenceDiagram
   S-->>P: SiteSeoResult
   P->>L: runLighthouse(url)
   L-->>P: LighthouseResult (o error controlado)
+  P->>K: analyzeKeywords(pages, options)
+  K->>X: consulta opcional (si hay credenciales y propiedad)
+  X-->>K: filas o estado controlado
+  K-->>P: KeywordReport | null
   P-->>E: InspectResult
-  E->>E: renderMarkdownReport / toAuditData
-  E-->>U: Markdown + JSON
+  E->>E: renderMarkdownReport / toAuditData / CSV
+  E-->>U: Markdown + JSON + CSV
 ```
 
 Pasos:
@@ -185,7 +199,8 @@ Pasos:
 5. **Detección de stack**: reglas sobre cabeceras, HTML, cookies, globals del DOM y URLs de recursos.
 6. **SEO**: 18 comprobaciones por página + 12 de sitio, agrupadas en un resumen `pass/warn/fail`.
 7. **Lighthouse**: se cierra el navegador del crawl y se lanza una instancia aparte de Chrome con `chrome-launcher`. Si falla, se devuelve `LighthouseResult.error` y el informe continúa.
-8. **Informe**: Markdown agrupado por `id + estado`; JSON con `AuditData`.
+8. **Keywords**: se analizan las páginas renderizadas. Si hay credenciales y propiedad verificada, se consultan GSC/Bing con caché; cualquier fallo se registra como estado del proveedor y no aborta la auditoría.
+9. **Informe**: Markdown agrupado por `id + estado`; JSON con `AuditData`; CSV opcional de positivas/negativas.
 
 ### Cierre de Chrome
 
@@ -206,9 +221,15 @@ Pasos:
 | `seo/site-checks.ts` | 12 comprobaciones de sitio | `SeoCheck[]` |
 | `seo/fixes.ts` | Contexto de stack y recomendaciones específicas | `StackContext`, `fixFor()` |
 | `seo/index.ts` | Orquestar checks y resumen | `SiteSeoResult` |
+| `keywords/index.ts` | Orquestar análisis on-page y proveedores | `KeywordReport` |
+| `keywords/analyze.ts` | Normalizar, puntuar, agrupar y detectar negativas/canibalización | `KeywordReport` |
+| `keywords/providers/gsc.ts` | Propiedad, OAuth y `searchAnalytics.query` | `KeywordProviderResult` |
+| `keywords/providers/bing.ts` | Propiedad, API key y `GetQueryStats` | `KeywordProviderResult` |
+| `keywords/providers/cache.ts` | Caché local con TTL de 24 h | entradas JSON |
 | `perf/lighthouse.ts` | Ejecutar y resumir Lighthouse | `LighthouseResult` |
 | `report/markdown.ts` | Informe legible en español | `string` Markdown |
 | `report/json.ts` | Proyección estable para integraciones | `AuditData` |
+| `report/keywords-csv.ts` | CSV de positivas y negativas | `string` CSV |
 | `pipeline.ts` | Orquestación completa | `InspectResult` |
 | `packages/cli/src/args.ts` | Parseo de flags y rutas de salida | `CliOptions` |
 | `packages/cli/src/index.ts` | Ejecutar, progresar, escribir y reportar | código de salida |
@@ -225,7 +246,8 @@ InspectResult
 ├─ stack: StackReport          # tecnologías + evidencias + notas
 ├─ crawl: CrawlResult          # páginas, errores, visitadas, duración
 ├─ seo: SiteSeoResult          # checks[], pages[], summary
-└─ lighthouse?: LighthouseResult
+├─ lighthouse?: LighthouseResult
+└─ keywords?: KeywordReport | null
 ```
 
 Tipos principales:
@@ -241,7 +263,10 @@ Tipos principales:
 | `SeoCheck` | `id`, `category`, `status`, `severity`, `title`, `detail`, `evidence?`, `fix?`, `pageUrl?` |
 | `SiteSeoResult` | `checks[]`, `pages: PageSeoResult[]`, `summary: { pass, warn, fail }` |
 | `LighthouseResult` | `scores`, `metrics[]`, `failingAudits[]`, `elapsedMs`, `error?` |
-| `AuditData` | URL, fecha, estado, redirecciones, stack, SEO, Lighthouse, resumen de crawl y recursos pesados |
+| `KeywordReport` | `locale`, `country`, `period`, `providers[]`, `positives[]`, `negatives[]`, `clusters[]`, `summary`, `limitations[]` |
+| `KeywordCandidate` | `keyword`, `intent`, `score`, `confidence`, `sources`, `onPage`, `gsc?`, `bing?`, `recommendedPage`, `action`, `cluster`, `cannibalization` |
+| `KeywordProviderStatus` | `provider`, `status`, `message`, `property`, `fetchedAt`, `rows`, `truncated`, `cached` |
+| `AuditData` | URL, fecha, estado, redirecciones, stack, SEO, Lighthouse, keywords, resumen de crawl y recursos pesados |
 
 `AuditData` es la frontera pública para la UI y para `--json`; `InspectResult` es el contrato interno del motor. La UI no importa tipos de Puppeteer ni de Lighthouse.
 
@@ -255,6 +280,7 @@ classDiagram
     +CrawlResult crawl
     +SiteSeoResult seo
     +LighthouseResult lighthouse
+    +KeywordReport keywords
   }
   class SiteSeoResult {
     +SeoCheck[] checks
@@ -279,6 +305,7 @@ classDiagram
   InspectResult --> SiteSeoResult
   InspectResult --> CrawlResult
   InspectResult --> LighthouseResult
+  InspectResult --> KeywordReport
 ```
 
 ## 7. Detalle de las etapas
@@ -339,11 +366,26 @@ Cada check tiene severidad (`critico`, `alto`, `medio`, `bajo`), estado (`pass`,
 - Se ordenan por peso descendente y score ascendente.
 - Chrome se valida con `existsSync` antes de `chrome-launcher`; si no existe, se devuelve un error controlado (TD-01).
 
-### 7.7 Informe
+### 7.7 Keywords
 
-Secciones: Resumen ejecutivo, Hallazgos prioritarios, Stack tecnológico, Lo que ya funciona, Problemas encontrados (por severidad), Rendimiento y calidad, Accesibilidad y buenas prácticas, Páginas analizadas, Plan de acción priorizado, Anexo técnico y Limitaciones.
+- **On-page**: extrae n-gramas de 1–3 palabras de title, headings, meta description, URL, alt, anchors y cuerpo; normaliza, elimina stopwords y deduplica.
+- **Intención**: heurísticas léxicas para informacional, navegacional, comercial, transaccional, local o desconocida.
+- **Scoring**: combina señales on-page, intención y métricas externas cuando existen. La confianza refleja la cantidad y calidad de las fuentes.
+- **Clusters y páginas**: agrupa por término principal y recomienda la página con más señales; marca canibalización si aparece en varias.
+- **Negativas**: reglas heurísticas (empleo, gratis, descarga, etc.) más las aportadas por el usuario. Se exportan como sugerencias `phrase`/`exact`; no se aplican solas.
+- **GSC**: OAuth de solo lectura, ventana de 28 días con 3 días de retraso, `sites.list` y `searchAnalytics.query`, máximo 25.000 filas.
+- **Bing**: API key, `GetUserSites` y `GetQueryStats`, ventana de 28 días. La API REST/JSON sustituye a las SOAP/POX retiradas.
+- **Caché**: `.cache/seo-audit`, TTL 24 h. No guarda tokens ni HTML. `--refresh-keywords` la omite.
+- **Degradación**: si faltan credenciales o la propiedad no está verificada, el proveedor queda en `no-config`/`no-property` y la auditoría sigue con on-page.
+- **Exportación**: Markdown, `AuditData.keywords` y CSV con BOM UTF-8 y protección contra fórmulas.
 
-Límites de presentación: 5 hallazgos prioritarios, 20 comprobaciones correctas, 40 problemas por severidad, 12 acciones en el plan. Los checks se agrupan por `id + estado` para no repetir el mismo problema en cada página; se conserva el número de URLs afectadas.
+Configuración y operación detalladas: [`KEYWORDS.md`](KEYWORDS.md).
+
+### 7.8 Informe
+
+Secciones: Resumen ejecutivo, Hallazgos prioritarios, Stack tecnológico, Lo que ya funciona, Problemas encontrados (por severidad), Rendimiento y calidad, Accesibilidad y buenas prácticas, Palabras clave y oportunidades, Páginas analizadas, Plan de acción priorizado, Anexo técnico y Limitaciones.
+
+Límites de presentación: 5 hallazgos prioritarios, 20 comprobaciones correctas, 40 problemas por severidad, 12 acciones en el plan. Los checks se agrupan por `id + estado` para no repetir el mismo problema en cada página; se conserva el número de URLs afectadas. Los proveedores externos se muestran con su estado y limitaciones; nunca se ocultan fallos de credenciales o propiedad.
 
 ## 8. Seguridad
 
@@ -356,7 +398,8 @@ Modelo de confianza: **herramienta local para URLs elegidas por el usuario**. No
 | Superficie HTTP | Solo `POST /api/audit`; `405` para otros métodos |
 | Errores de cliente | URL insegura → `400`; resto → `500` |
 | Hosts privados | Bloqueados salvo `allowPrivateHosts` / `--allow-private` |
-| Sin secretos | No hay credenciales ni telemetría |
+| Secretos | GSC/Bing se leen del entorno; no se escriben en informes, CSV ni caché |
+| Datos externos | Solo APIs oficiales y solo con credenciales y propiedad verificada |
 | Ejecución | Chrome local headless; sin descarga de binarios |
 
 Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** pasan por el guard SSRF. Una URL pública que redirija a una IP privada podría ser cargada por Chrome y parte de su contenido acabar en el informe. Mitigación actual: no exponer la API y usar `allowPrivate` solo en desarrollo. Ver TD-03 en [`TECHNICAL-DEBT.md`](TECHNICAL-DEBT.md).
@@ -371,6 +414,8 @@ Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** 
 | Página del crawl falla | Se registra en `CrawlResult.errors` y se sigue |
 | Chrome no encontrado | Error controlado al lanzar render o Lighthouse |
 | Lighthouse falla | `LighthouseResult.error`; el informe se genera igual |
+| GSC/Bing sin credenciales o propiedad | Estado `no-config`/`no-property`; se continúa con on-page |
+| GSC/Bing falla | Estado `error`/`partial`; el resto del informe se genera igual |
 | Página sin datos | Checks con `status`/`severity` coherentes y `detail` explicativo |
 
 ## 10. Decisiones de diseño
@@ -384,6 +429,8 @@ Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** 
 | Fingerprints propios | Evitar dependencias con licencias restrictivas | Cobertura heurística y mantenimiento manual |
 | Informe en Markdown | Legible, versionable y compatible con cualquier herramienta | Presentación menos rica que HTML/PDF |
 | Fixes contextuales por stack | Recomendaciones accionables, no genéricas | Requiere mantener reglas por tecnología |
+| Keywords on-page siempre, externas opcionales | Aporta valor sin credenciales y evita bloquear la auditoría | Menos datos si no hay GSC/Bing |
+| Proveedores oficiales y caché local | Evita scraping y llamadas repetidas | Requiere credenciales y aceptar límites de cada API |
 | Monorepo con core TS fuente | Iteración rápida sin paso de build | Core no publicable aún (TD-02) |
 | Guard SSRF explícito | Evitar que una herramienta local se convierta en vector de acceso a la red interna | Falsos negativos posibles; `--allow-private` para desarrollo |
 
@@ -394,6 +441,8 @@ Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** 
 - **Nueva regla de stack**: añadir a `RULES` en `detect/stack.ts` con `id`, nombre, categoría y función `detect`.
 - **Nuevo fix contextual**: ampliar `fixFor()` y `StackContext` en `seo/fixes.ts`.
 - **Nueva métrica de Lighthouse**: añadir a `METRICS` en `perf/lighthouse.ts`.
+- **Nuevo proveedor de keywords**: implementar `KeywordProvider` en `keywords/providers/`, registrarlo en `providers/index.ts` y añadir su configuración en `keywords/config.ts`.
+- **Nueva regla de intención/negativas**: ampliar `keywords/intent.ts` o `keywords/analyze.ts`.
 - **Nueva sección del informe**: añadir un `render*Section` en `report/markdown.ts`.
 - **Nuevo campo público**: ampliar `AuditData` en `report/json.ts` y los tipos de la UI.
 - **Nueva UI**: consumir `POST /api/audit` o importar el core desde Node/tsx.
@@ -401,6 +450,7 @@ Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** 
 ## 12. Rendimiento y límites
 
 - El coste dominante es el render/crawl (≈1–5 s por página) y Lighthouse (≈8–20 s).
+- GSC/Bing añaden latencia de red; la caché de 24 h evita repetir consultas.
 - El crawl es secuencial: no hay concurrencia de páginas.
 - Una auditoría de 10 páginas con Lighthouse suele tardar entre 30 s y 2 min según el sitio.
 - `networkidle2` puede esperar hasta el timeout en páginas con polling o websockets.
@@ -409,11 +459,12 @@ Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** 
 
 ## 13. Testing
 
-- **Unitarios** (Vitest): URL/SSRF, crawl, stack, checks SEO, resumen de Lighthouse con Chrome mockeado, Markdown, argumentos y CLI.
-- Los tests no requieren Chrome ni red.
+- **Unitarios** (Vitest): URL/SSRF, crawl, stack, checks SEO, resumen de Lighthouse con Chrome mockeado, keywords (motor y proveedores), caché, Markdown/CSV, argumentos, CLI y exportación CSV web.
+- Los tests no requieren Chrome, red ni credenciales.
 - **Smoke manual** con `npm run smoke` y auditorías reales con `npm run audit`.
 - Lighthouse se mockea con `vi.hoisted` para evitar `spawn ENOENT` y tests frágiles.
-- La UI y el endpoint de Vite no tienen tests automatizados todavía (TD-06).
+- GSC y Bing se mockean con `fetch` inyectado; no se llaman APIs reales en tests.
+- El handler de la API y los componentes React no tienen tests automatizados todavía (TD-06).
 
 ## 14. Operación
 
@@ -424,8 +475,8 @@ Riesgo residual importante: la navegación de Chrome y sus subpeticiones **no** 
 | Preview del build | `npm run build:web` + `npm run preview` | 4173 | Plugin Vite |
 | Smoke del motor | `npm run smoke -- <url>` | — | — |
 
-Los informes van a `reports/` por defecto; la carpeta está ignorada por git. La API no debe publicarse en Internet.
+Los informes van a `reports/` por defecto y la caché de keywords a `.cache/seo-audit`; ambas carpetas están ignoradas por git. La API no debe publicarse en Internet. Las credenciales de GSC/Bing se definen en el entorno del proceso.
 
 ## 15. Deuda y evolución
 
-La auditoría de deuda técnica, con prioridades, evidencia y plan de remediación, está en [`TECHNICAL-DEBT.md`](TECHNICAL-DEBT.md). Las líneas de evolución recomendadas son: empaquetado del core, CI, cierre del riesgo SSRF en Chrome, cumplimiento de `robots.txt` y tests de la capa web.
+La auditoría de deuda técnica, con prioridades, evidencia y plan de remediación, está en [`TECHNICAL-DEBT.md`](TECHNICAL-DEBT.md). Las líneas de evolución recomendadas son: empaquetado del core, CI, cierre del riesgo SSRF en Chrome, cumplimiento de `robots.txt`, tests de la capa web y proveedores de volumen de pago (Google Ads/Microsoft Ads) si se necesitan.

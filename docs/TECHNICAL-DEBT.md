@@ -1,7 +1,11 @@
 # Auditoría de deuda técnica
 
-**Fecha:** 2026-11-13  
-**Alcance:** repositorio `seo-audit` en su estado MVP inicial (sin commits previos).  
+**Fecha:** 2026-11-13
+
+**Actualización:** 2026-11-14 — baseline revalidado tras la feature de keywords (83 tests / 12 archivos).
+
+**Alcance:** repositorio `seo-audit` en su estado MVP inicial y primera iteración de keywords.
+
 **Método:** revisión estática del código, ejecución de typecheck/lint/tests/build, `npm audit`, `npm outdated`, búsqueda de `TODO/FIXME` y revisión de límites de seguridad y operación.
 
 No es un pentest ni una auditoría legal. Las conclusiones de seguridad se basan en el modelo de amenaza documentado: herramienta local para URLs elegidas por el usuario.
@@ -12,7 +16,7 @@ No es un pentest ni una auditoría legal. Las conclusiones de seguridad se basan
 | --- | --- |
 | `npm run typecheck` | Correcto en `core`, `cli` y `web` |
 | `npm run lint` | Correcto (ESLint 10 + typescript-eslint) |
-| `npm test` | **63 tests / 8 archivos** en verde |
+| `npm test` | **83 tests / 12 archivos** en verde |
 | `npm run build:web` | Correcto (Vite 8.3.8) |
 | `npm audit --omit=dev` | **0 vulnerabilidades** de producción |
 | `npm audit` | **9 moderadas**, todas en cadena de desarrollo ESLint/minimatch |
@@ -30,7 +34,7 @@ Los tests no requieren Chrome ni red. El smoke real se ejecutó manualmente con 
 | TD-03 | Media (alta si se expone) | Seguridad | El guard SSRF no cubre redirecciones ni subpeticiones dentro de Chrome | Pendiente / riesgo aceptado en local |
 | TD-04 | Media | Ética / operación | No se respetan las directivas `Disallow` de `robots.txt` | Pendiente |
 | TD-05 | Media | Calidad | No hay CI; los checks dependen de ejecución manual | Pendiente |
-| TD-06 | Media | Testing | No hay tests de la UI ni del endpoint `/api/audit` | Pendiente |
+| TD-06 | Media | Testing | No hay tests de la UI ni del endpoint `/api/audit`; solo hay tests de exportación CSV web | Parcial |
 | TD-07 | Media | Legal | No existe archivo `LICENSE`; el repositorio no está preparado para publicación | Pendiente (decisión) |
 | TD-08 | Baja | UX / API | Sin cancelación ni timeout de la petición del cliente; errores de cliente mejorables | Parcial |
 | TD-09 | Baja | Dependencias | `vite` estaba declarado en la raíz sin uso directo | **Resuelto** |
@@ -58,7 +62,7 @@ Prioridad recomendada: TD-03 y TD-07 antes de exponer el repositorio o la API; T
 - Test nuevo: ejecutable inexistente → error controlado y `launch` no invocado.
 - Tests existentes usan `process.execPath` como ruta válida mockeada.
 
-**Verificación:** `npm test` (63 tests) y smoke real con Chrome.
+**Verificación:** `npm test` (63 tests en aquel momento) y smoke real con Chrome.
 
 ### TD-02 — Core sin build publicable y acoplamiento del plugin Vite (Media)
 
@@ -127,13 +131,13 @@ Añadir cache de npm y, opcionalmente, un smoke test sin Chrome para el core. No
 
 **Esfuerzo:** S. **Prioridad:** antes de abrir el repositorio a colaboración.
 
-### TD-06 — Capa web sin tests (Media)
+### TD-06 — Capa web sin tests (Media) — Parcial
 
-**Evidencia:** los 63 tests cubren core y CLI. No hay tests para `apps/web/src/*` ni para `server/audit-api.ts`.
+**Evidencia:** los 83 tests cubren core, CLI y dos casos de exportación CSV web (`apps/web/src/keywords-csv.test.ts`). No hay tests para el resto de `apps/web/src/*` ni para `server/audit-api.ts`.
 
-**Impacto:** cambios en contratos (`AuditData`), validación de `maxPages`, estados de carga/error o descarga del informe pueden romper la UI sin detección.
+**Impacto:** cambios en contratos (`AuditData`, opciones de keywords), validación de `maxPages`/locale/negativas, estados de carga/error o descarga del informe pueden romper la UI sin detección.
 
-**Recomendación:** extraer el handler de la API a una función testeable (req/res o función pura), añadir tests de validación (método, URL ausente, URL insegura, cuerpo grande, clamp de páginas) y tests de componentes con Vitest + Testing Library. Un E2E con Playwright es opcional.
+**Recomendación:** extraer el handler de la API a una función testeable (req/res o función pura), añadir tests de validación (método, URL ausente, URL insegura, cuerpo grande, clamp de páginas, locale inválido, límite de negativas) y tests de componentes con Vitest + Testing Library. Un E2E con Playwright es opcional.
 
 **Esfuerzo:** M. **Prioridad:** después de CI.
 

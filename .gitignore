@@ -5,4 +5,6 @@ reports/
 *.log
 .env
 .env.*
+!.env.example
+.cache/
 .DS_Store
